@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+
+  app-fe:
+    container_name: app-fe
+    build:
+      context: app-fe
+
+  app-be:
+    container_name: app-be
+    build:
+      context: app-be
+  
+  caddy:
+    container_name: caddy
+    build:
+      context: caddy
+    ports:
+      - 8000:80
+      - 80:80
+      - 443:443

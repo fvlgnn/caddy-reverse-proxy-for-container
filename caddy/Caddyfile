@@ -1,0 +1,16 @@
+:80 {
+    
+    handle_path /app-be/* {
+        reverse_proxy app-be:3030
+    }
+
+    handle_path /app-fe/* {
+        reverse_proxy app-fe:8080
+    }
+
+    handle_path /* {
+        reverse_proxy app-fe:8080
+        reverse_proxy /sub-path/* app-be:3030
+    }
+
+}

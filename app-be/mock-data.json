@@ -1,0 +1,14 @@
+{
+    "request": {
+      "method": "GET",
+      "path": "/sub-path/v1/get"
+    },
+    "response": {
+      "body": [
+        { "id": 1, "name": "Mario Rossi", "location": "Roma" },
+        { "id": 2, "name": "Ugo Verdi", "location": "Palermo" },
+        { "id": 3, "name": "Fabio Nero", "location": "Napoli" },
+        { "id": 4, "name": "Antonio Bianchi", "location": "Milano" }
+      ]
+    }
+  }

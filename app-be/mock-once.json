@@ -1,0 +1,9 @@
+{
+    "request": {
+      "method": "GET",
+      "path": "/v1/get/once"
+    },
+    "response": {
+      "body": { "id": 1, "name": "Mario Rossi", "location": "Roma" }
+    }
+  }
