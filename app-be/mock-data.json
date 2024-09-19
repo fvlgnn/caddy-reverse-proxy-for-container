@@ -5,10 +5,10 @@
     },
     "response": {
       "body": [
-        { "id": 1, "name": "Mario Rossi", "location": "Roma" },
-        { "id": 2, "name": "Ugo Verdi", "location": "Palermo" },
-        { "id": 3, "name": "Fabio Nero", "location": "Napoli" },
-        { "id": 4, "name": "Antonio Bianchi", "location": "Milano" }
+        { "id": 1, "name": "Foo Bar", "location": "Cityfoo" },
+        { "id": 2, "name": "Bar Foo", "location": "Citybar" },
+        { "id": 3, "name": "Oof Rab", "location": "Cityoof" },
+        { "id": 4, "name": "Rab Oof", "location": "Cityrab" }
       ]
     }
   }
