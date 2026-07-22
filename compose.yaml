@@ -1,0 +1,34 @@
+name: caddy-reverse-proxy-demo
+
+services:
+  app-fe:
+    build:
+      context: app-fe
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+
+  app-be:
+    build:
+      context: app-be
+    security_opt:
+      - no-new-privileges:true
+
+  caddy:
+    build:
+      context: caddy
+    depends_on:
+      app-fe:
+        condition: service_healthy
+      app-be:
+        condition: service_started
+    environment:
+      CORS_ORIGIN: "${CORS_ORIGIN:-http://localhost:5173}"
+    ports:
+      - "8000:80"
+    security_opt:
+      - no-new-privileges:true

@@ -1,154 +1,262 @@
-# caddy-reverse-proxy-for-container
+# Caddy reverse proxy for containers
 
-Reverse proxy with Caddy for containerized web applications
+Minimal example of a Caddy reverse proxy in front of a static frontend and a
+configurable mock API, with all services running in containers on the same
+Docker Compose network.
 
-## docker-compose
+The example demonstrates both common path-routing behaviours:
 
-```sh
-# up
-docker-compose up --build -d
+- `/app-be/*` uses `handle_path`, so Caddy removes `/app-be` before forwarding
+  the request;
+- `/sub-path/*` uses `handle`, so the backend receives the complete path;
+- `/app-fe/*` removes the prefix and serves the frontend;
+- every other path is sent to the frontend.
 
-# down
-docker-compose down
+## Architecture
+
+```text
+Browser ── http://localhost:8000 ── Caddy
+                                      ├── /app-be/*   ──> mock API :8080
+                                      ├── /sub-path/* ──> mock API :8080
+                                      └── everything  ──> NGINX :8080
 ```
 
+The backend is built from
+[`fvlgnn/go-mock-api-server`](https://github.com/fvlgnn/go-mock-api-server),
+pinned to commit `7585fa1e44cb4cc985d88fcd9f6bed8ea502ff09` because the
+project does not yet publish tagged container images. The mock definitions in
+`app-be/*.json` are copied into the final image.
 
-## docker
+## Requirements
 
-### Network
+- Docker Engine or Docker Desktop
+- Docker Compose v2 or v5 (`docker compose`)
 
-#### Create
+The Compose file is named `compose.yaml`: Docker documents this as the preferred
+name. `compose.yml` is also supported, while `docker-compose.yaml` and
+`docker-compose.yml` are retained mainly for backward compatibility.
+
+## Start the example
+
+```sh
+docker compose up --build -d --wait
+```
+
+Open <http://localhost:8000/> and select **Ottieni dati**, or test the routes
+directly:
+
+```sh
+curl http://localhost:8000/app-be/v1/get/once
+curl http://localhost:8000/app-be/sub-path/v1/get
+curl http://localhost:8000/sub-path/v1/get
+```
+
+Expected routing:
+
+| Public request | Request received by the service | Service |
+|---|---|---|
+| `/` | `/` | frontend |
+| `/app-fe/` | `/` | frontend |
+| `/app-be/v1/get/once` | `/v1/get/once` | mock API |
+| `/app-be/sub-path/v1/get` | `/sub-path/v1/get` | mock API |
+| `/sub-path/v1/get` | `/sub-path/v1/get` | mock API |
+
+Stop and remove the containers and network with:
+
+```sh
+docker compose down
+```
+
+## `handle` and `handle_path`
+
+Use `handle` when the upstream must receive the original request path:
+
+```caddyfile
+handle /sub-path/* {
+	reverse_proxy app-be:8080
+}
+```
+
+A request for `/sub-path/v1/get` is forwarded as `/sub-path/v1/get`.
+
+Use `handle_path` when the public prefix is only a routing concern and the
+upstream must not receive it:
+
+```caddyfile
+handle_path /app-be/* {
+	reverse_proxy app-be:8080
+}
+```
+
+A request for `/app-be/v1/get/once` is forwarded as `/v1/get/once`.
+
+The final matcher-less `handle` in the Caddyfile is the explicit frontend
+fallback. Requests to `/app-fe` and `/app-be` are redirected to their canonical
+trailing-slash forms.
+
+## CORS and frontend development
+
+### Normal Compose usage: CORS is not needed
+
+The bundled frontend calls the relative URL `/app-be/v1/get/once`. The page and
+the API therefore share the same scheme, hostname and port through Caddy. This
+is a **same-origin** request and browsers do not apply CORS restrictions.
+
+Do not replace the relative URL with `http://localhost:8000/...`: an absolute
+localhost URL breaks when another hostname, IP address, port or HTTPS is used.
+
+### Separate development server: CORS is needed
+
+During development, a frontend may instead run on another origin, for example
+Vite on `http://localhost:5173`, while the API remains behind Caddy on
+`http://localhost:8000`. Caddy allows that single origin by default:
+
+```sh
+docker compose up --build -d
+```
+
+From the development frontend, call the full proxy URL:
+
+```js
+fetch('http://localhost:8000/app-be/v1/get/once')
+```
+
+For a different development origin, set it before starting Compose:
+
+```sh
+CORS_ORIGIN=http://localhost:4200 docker compose up --build -d
+```
+
+The value must be an origin only—scheme, hostname and optional port, without a
+path or trailing slash. The browser's `Origin` header must match it exactly.
+
+CORS is implemented at Caddy, where the API is exposed, rather than at NGINX,
+which only serves static files. Preflight requests are accepted for the common
+HTTP methods and for `Content-Type` and `Authorization`. If your development
+client sends other custom headers, add them explicitly to
+`Access-Control-Allow-Headers` in `caddy/Caddyfile`.
+
+The configuration intentionally does not use `Access-Control-Allow-Origin: *`:
+allowing every website is unnecessary for this example and is unsafe once an
+API gains sensitive data or credentials. Only one development origin is
+enabled at a time. Same-origin requests continue to work regardless of the
+configured CORS origin.
+
+Useful checks when a browser reports a CORS failure:
+
+```sh
+curl -i \
+  -H 'Origin: http://localhost:5173' \
+  http://localhost:8000/app-be/v1/get/once
+
+curl -i -X OPTIONS \
+  -H 'Origin: http://localhost:5173' \
+  -H 'Access-Control-Request-Method: GET' \
+  http://localhost:8000/app-be/v1/get/once
+```
+
+If the response lacks `Access-Control-Allow-Origin`, compare the request origin
+with `CORS_ORIGIN` and recreate the Caddy container after changing the value.
+
+## Mock API configuration
+
+Each JSON file in `app-be` declares a method, path and response body. For
+example:
+
+```json
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/get/once"
+  },
+  "response": {
+    "body": { "id": 1, "name": "Foo Bar", "location": "City" }
+  }
+}
+```
+
+After adding or changing a mock, rebuild the backend:
+
+```sh
+docker compose up --build -d app-be
+```
+
+The current upstream server expects unique paths. Do not define the same path
+in more than one JSON file.
+
+## Run the containers manually
+
+Compose is recommended, but the equivalent manual workflow is useful for
+learning how service-name discovery works:
 
 ```sh
 docker network create my-apps-network
+
+docker build -t demo-app-be ./app-be
+docker run -d --name app-be --network my-apps-network demo-app-be
+
+docker build -t demo-app-fe ./app-fe
+docker run -d --name app-fe --network my-apps-network demo-app-fe
+
+docker build -t demo-caddy ./caddy
+docker run -d --name caddy \
+  --network my-apps-network \
+  -e CORS_ORIGIN=http://localhost:5173 \
+  -p 8000:80 \
+  demo-caddy
 ```
 
-#### Delete
+Cleanup:
 
 ```sh
+docker rm -f caddy app-fe app-be
 docker network rm my-apps-network
 ```
 
-
-### app-be (BackEnd app)
-
-```sh
-cd app-be
-docker build -t app-be .
-docker run --name app-be -it -d --network my-apps-network app-be
-# DEBUG # docker run --name app-be -it --rm -p 3030:3030 --network my-apps-network app-be
-```
-
-
-### app-fe (FrontEnd app)
+To mount a Caddyfile during local experimentation instead of rebuilding the
+image:
 
 ```sh
-cd app-fe
-docker build -t app-fe .
-docker run --name app-fe -it -d --network my-apps-network app-fe
-# DEBUG # docker run --name app-fe -it --rm -p 8080:8080 --network my-apps-network app-fe
-```
-
-Endpoint app-be in `app-fe/script.js` (`XMLHttpRequest`) 
-
-
-### caddy (Reverse Proxy)
-
-```sh
-cd caddy
-docker build -t caddy .
-docker run --name caddy -it -d -p 8000:80 --network my-apps-network caddy
-# DEBUG # docker run --name caddy -it --rm -p 8000:80 --network my-apps-network caddy
-```
-
-
-## Test app-fe
-
-- http://localhost:8000/
-- http://localhost:8000/app-fe/
-
-
-### Test app-be
-
-- http://localhost:8000/app-be/v1/get/once
-- http://localhost:8000/app-be/sub-path/v1/get
-- http://localhost:8000/sub-path/v1/get
-
-
-## Caddyfile
-
-
-### Configuration without handle path
-
-For instance, a request to the endpoint http://caddy/sub-path/v1/get will be forwarded to http://app-be/sub-path/v1/get
-
-```
-:80 {
-    reverse_proxy /sub-path/* app-be:3030
-}
-```
-
-
-### Configuration with handle path
-
-For instance, a request to the endpoint http://caddy/sub-path/v1/get will be forwarded to http://app-be/v1/get
-
-```
-:80 {
-    handle_path /sub-path/* {
-        reverse_proxy app-be:3030
-    }
-}
-```
-
-
-## Tips
-
-Run with configuration as volume
-
-```bash
 docker run -d --name caddy \
   --network my-apps-network \
-  -p 80:80 \
-  -v $(pwd)/Caddyfile:/etc/caddy/Caddyfile \
-  caddy
+  -e CORS_ORIGIN=http://localhost:5173 \
+  -p 8000:80 \
+  -v "$(pwd)/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+  caddy:2.11.4-alpine
 ```
 
+## Production and HTTPS
 
-## Example
+The included `:80` site and `8000:80` port mapping are deliberately intended
+for a local demonstration. Publishing port 443 alone does not enable HTTPS.
 
-Configuration Angular FE
+For a real deployment:
 
-### Local Test
+1. replace `:80` in the Caddyfile with a DNS name such as `example.com`;
+2. publish ports `80:80`, `443:443` and `443:443/udp`;
+3. point the domain's A/AAAA records at the server;
+4. persist Caddy's `/data` and `/config` directories with named volumes;
+5. review authentication, authorization, CORS and the recommendations in
+   `SECURITY.md` before exposing the mock API.
 
-```typescript
-export const environment = {
-  production: true,
-  useHash: false,
-  serverUrl: 'http://localhost:8000/sub-path/v1/get',
-};
+Caddy will then obtain and renew certificates and redirect HTTP to HTTPS. The
+frontend can keep using relative API URLs without environment-specific changes.
+
+## Validation and maintenance
+
+The GitHub Actions workflow validates the Compose model, builds and starts the
+stack, then smoke-tests every documented route. It does not perform automatic
+security scanning. Dependabot opens monthly Docker image update proposals so
+version changes remain explicit and reviewable.
+
+Useful local checks:
+
+```sh
+docker compose config --quiet
+docker compose build
+docker compose run --rm caddy caddy validate --config /etc/caddy/Caddyfile
 ```
 
-### Production 
+## License
 
-
-```typescript
-export const environment = {
-  production: true,
-  useHash: false,
-  serverUrl: 'http://example.com/sub-path/v1/get',
-};
-```
-
-### IP addr
-
-Private or public 
-
-```typescript
-export const environment = {
-  production: true,
-  useHash: false,
-  serverUrl: 'http://192.168.1.100:8000/sub-path/v1/get',
-};
-```
-
+Released under the [MIT License](LICENSE).

@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /app-fe
+    schedule:
+      interval: monthly
+  - package-ecosystem: docker
+    directory: /app-be
+    schedule:
+      interval: monthly
+  - package-ecosystem: docker
+    directory: /caddy
+    schedule:
+      interval: monthly

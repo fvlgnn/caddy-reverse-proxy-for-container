@@ -1,16 +1,47 @@
 :80 {
-    
-    handle_path /app-be/* {
-        reverse_proxy app-be:3030
-    }
+	@cors_preflight {
+		method OPTIONS
+		path /app-be/* /sub-path/*
+		header Origin {$CORS_ORIGIN}
+	}
 
-    handle_path /app-fe/* {
-        reverse_proxy app-fe:8080
-    }
+	handle @cors_preflight {
+		header Access-Control-Allow-Origin "{$CORS_ORIGIN}"
+		header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+		header Access-Control-Allow-Headers "Content-Type, Authorization"
+		header Access-Control-Max-Age "86400"
+		header Vary "Origin, Access-Control-Request-Method, Access-Control-Request-Headers"
+		respond 204
+	}
 
-    handle_path /* {
-        reverse_proxy app-fe:8080
-        reverse_proxy /sub-path/* app-be:3030
-    }
+	@cors_request {
+		path /app-be/* /sub-path/*
+		header Origin {$CORS_ORIGIN}
+	}
 
+	header /app-be/* Vary Origin
+	header /sub-path/* Vary Origin
+
+	header @cors_request {
+		Access-Control-Allow-Origin "{$CORS_ORIGIN}"
+	}
+
+	redir /app-be /app-be/
+	redir /app-fe /app-fe/
+
+	handle_path /app-be/* {
+		reverse_proxy app-be:8080
+	}
+
+	handle_path /app-fe/* {
+		reverse_proxy app-fe:8080
+	}
+
+	handle /sub-path/* {
+		reverse_proxy app-be:8080
+	}
+
+	handle {
+		reverse_proxy app-fe:8080
+	}
 }
