@@ -1,9 +1,17 @@
 {
-    "request": {
-      "method": "GET",
-      "path": "/v1/get/once"
+  "request": {
+    "method": "GET",
+    "path": "/v1/get/once"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Cache-Control": "no-store"
     },
-    "response": {
-      "body": { "id": 1, "name": "Foo Bar", "location": "City" }
+    "body": {
+      "id": 1,
+      "name": "Foo Bar",
+      "location": "City"
     }
   }
+}

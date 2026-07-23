@@ -1,14 +1,18 @@
 {
-    "request": {
-      "method": "GET",
-      "path": "/sub-path/v1/get"
+  "request": {
+    "method": "GET",
+    "path": "/sub-path/v1/get"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Mock-Server": "go-mock-api-server"
     },
-    "response": {
-      "body": [
-        { "id": 1, "name": "Foo Bar", "location": "Cityfoo" },
-        { "id": 2, "name": "Bar Foo", "location": "Citybar" },
-        { "id": 3, "name": "Oof Rab", "location": "Cityoof" },
-        { "id": 4, "name": "Rab Oof", "location": "Cityrab" }
-      ]
-    }
+    "body": [
+      { "id": 1, "name": "Foo Bar", "location": "Cityfoo" },
+      { "id": 2, "name": "Bar Foo", "location": "Citybar" },
+      { "id": 3, "name": "Oof Rab", "location": "Cityoof" },
+      { "id": 4, "name": "Rab Oof", "location": "Cityrab" }
+    ]
   }
+}

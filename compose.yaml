@@ -13,8 +13,12 @@ services:
       - no-new-privileges:true
 
   app-be:
-    build:
-      context: app-be
+    image: ghcr.io/fvlgnn/go-mock-api-server:1.0.0
+    environment:
+      CONFIG_DIR: /config
+      SERVER_PORT: "8080"
+    volumes:
+      - ./app-be:/config:ro
     security_opt:
       - no-new-privileges:true
 
@@ -25,7 +29,7 @@ services:
       app-fe:
         condition: service_healthy
       app-be:
-        condition: service_started
+        condition: service_healthy
     environment:
       CORS_ORIGIN: "${CORS_ORIGIN:-http://localhost:5173}"
     ports:

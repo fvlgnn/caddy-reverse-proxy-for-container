@@ -21,11 +21,11 @@ Browser ── http://localhost:8000 ── Caddy
                                       └── everything  ──> NGINX :8080
 ```
 
-The backend is built from
-[`fvlgnn/go-mock-api-server`](https://github.com/fvlgnn/go-mock-api-server),
-pinned to commit `7585fa1e44cb4cc985d88fcd9f6bed8ea502ff09` because the
-project does not yet publish tagged container images. The mock definitions in
-`app-be/*.json` are copied into the final image.
+The backend uses the versioned multi-architecture image published by
+[`fvlgnn/go-mock-api-server`](https://github.com/fvlgnn/go-mock-api-server):
+`ghcr.io/fvlgnn/go-mock-api-server:1.0.0`. The mock definitions in
+`app-be/*.json` are mounted at runtime on `/config` as a read-only volume, so
+this repository no longer downloads or compiles the backend source.
 
 ## Requirements
 
@@ -39,6 +39,7 @@ name. `compose.yml` is also supported, while `docker-compose.yaml` and
 ## Start the example
 
 ```sh
+docker compose pull
 docker compose up --build -d --wait
 ```
 
@@ -170,19 +171,30 @@ example:
     "path": "/v1/get/once"
   },
   "response": {
+    "status": 200,
+    "headers": {
+      "Cache-Control": "no-store"
+    },
     "body": { "id": 1, "name": "Foo Bar", "location": "City" }
   }
 }
 ```
 
-After adding or changing a mock, rebuild the backend:
+The supported response fields are:
+
+- `status`: optional HTTP status code, default `200`;
+- `headers`: optional response headers;
+- `body`: required JSON response body.
+
+The server loads the files once at startup. After adding or changing a mock,
+restart the backend:
 
 ```sh
-docker compose up --build -d app-be
+docker compose restart app-be
 ```
 
-The current upstream server expects unique paths. Do not define the same path
-in more than one JSON file.
+Each method/path pair must be unique. Different methods can use the same path,
+for example `GET /users` and `POST /users`.
 
 ## Run the containers manually
 
@@ -192,8 +204,12 @@ learning how service-name discovery works:
 ```sh
 docker network create my-apps-network
 
-docker build -t demo-app-be ./app-be
-docker run -d --name app-be --network my-apps-network demo-app-be
+docker run -d --name app-be \
+  --network my-apps-network \
+  -e CONFIG_DIR=/config \
+  -e SERVER_PORT=8080 \
+  -v "$(pwd)/app-be:/config:ro" \
+  ghcr.io/fvlgnn/go-mock-api-server:1.0.0
 
 docker build -t demo-app-fe ./app-fe
 docker run -d --name app-fe --network my-apps-network demo-app-fe
@@ -246,13 +262,15 @@ frontend can keep using relative API URLs without environment-specific changes.
 
 The GitHub Actions workflow validates the Compose model, builds and starts the
 stack, then smoke-tests every documented route. It does not perform automatic
-security scanning. Dependabot opens monthly Docker image update proposals so
-version changes remain explicit and reviewable.
+security scanning. Dependabot opens Docker image update proposals so version
+changes remain explicit and reviewable. The backend deliberately uses a SemVer
+tag rather than `latest`, keeping every checkout reproducible.
 
 Useful local checks:
 
 ```sh
 docker compose config --quiet
+docker compose pull
 docker compose build
 docker compose run --rm caddy caddy validate --config /etc/caddy/Caddyfile
 ```
