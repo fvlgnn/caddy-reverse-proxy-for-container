@@ -1,6 +1,4 @@
-*
-!Dockerfile
-!nginx.conf
-!index.html
-!styles.css
-!script.js
+.git
+.gitignore
+*.log
+*.md
